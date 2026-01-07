@@ -464,7 +464,7 @@ const BattleCharacter: React.FC<BattleCharacterProps> = ({
               <img
                 src={character.imageUrl}
                 alt={character.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover object-top"
               />
             </motion.div>
             {character.isCampaign && (

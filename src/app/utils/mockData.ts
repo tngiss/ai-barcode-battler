@@ -7,7 +7,7 @@ export const mockProducts = {
     description: "Refreshing whisky highball with crisp carbonation",
     manufacturer: "Suntory",
     element: "earth" as Element,
-    imageUrl: "/suntory.jpg",
+    imageUrl: "/suntory2.jpg",
     isCampaign: true,
   },
   "4902102119917": {
@@ -17,7 +17,7 @@ export const mockProducts = {
     description: "Classic chocolate-coated biscuit sticks",
     manufacturer: "Glico",
     element: "water" as Element,
-    imageUrl: "/pocky.jpg",
+    imageUrl: "/pocky1.jpg",
     isCampaign: false,
   },
   "4901005510111": {
@@ -27,7 +27,7 @@ export const mockProducts = {
     description: "Spicy Korean instant noodles",
     manufacturer: "Nongshim",
     element: "fire" as Element,
-    imageUrl: "/shin.jpg",
+    imageUrl: "/shin1.jpg",
     isCampaign: false,
   },
   "4901313185322": {
@@ -37,7 +37,7 @@ export const mockProducts = {
     description: "Rich and smooth canned coffee",
     manufacturer: "Suntory",
     element: "electric" as Element,
-    imageUrl: "/boss.jpg",
+    imageUrl: "/boss1.jpg",
     isCampaign: true,
   },
   "4902430625937": {
@@ -47,7 +47,7 @@ export const mockProducts = {
     description: "Green tea flavored chocolate wafers",
     manufacturer: "Nestle",
     element: "wind" as Element,
-    imageUrl: "/kitkat.jpg",
+    imageUrl: "/kitkat1.jpg",
     isCampaign: false,
   },
 };

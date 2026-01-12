@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Swords, ArrowLeft, Trophy, Heart, Zap } from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -20,6 +20,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   onNavigate,
 }) => {
   const { t } = useLanguage();
+
   const [battlePhase, setBattlePhase] = useState<BattlePhase>("ready");
   const [winner, setWinner] = useState<"player" | "opponent" | null>(null);
   const [playerHP, setPlayerHP] = useState(playerCharacter.stats.hp);
@@ -31,6 +32,28 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   const [battleLog, setBattleLog] = useState<string[]>([]);
   const [turnCount, setTurnCount] = useState(0);
 
+  // Refs to always hold the latest values for use in setTimeout callbacks
+  const playerHPRef = useRef(playerHP);
+  const opponentHPRef = useRef(opponentHP);
+  const battlePhaseRef = useRef(battlePhase);
+  const winnerRef = useRef(winner);
+
+  useEffect(() => {
+    playerHPRef.current = playerHP;
+  }, [playerHP]);
+
+  useEffect(() => {
+    opponentHPRef.current = opponentHP;
+  }, [opponentHP]);
+
+  useEffect(() => {
+    battlePhaseRef.current = battlePhase;
+  }, [battlePhase]);
+
+  useEffect(() => {
+    winnerRef.current = winner;
+  }, [winner]);
+
   const startBattle = () => {
     setBattlePhase("playerTurn");
     addLog("Battle Start!");
@@ -41,7 +64,8 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
   };
 
   const executePlayerAction = (action: ActionType) => {
-    if (battlePhase !== "playerTurn") return;
+    // Block actions if it's not your turn or battle finished
+    if (battlePhase !== "playerTurn" || winnerRef.current !== null) return;
 
     if (action === "battle") {
       // Player attacks
@@ -59,12 +83,14 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
         addLog(`You dealt ${finalDamage} damage!`);
 
         if (newHP <= 0) {
+          // Player wins
           setTimeout(() => {
             setWinner("player");
             setBattlePhase("finished");
             addLog("Victory!");
           }, 800);
         } else {
+          // Opponent responds
           setTimeout(() => executeOpponentTurn(), 1500);
         }
 
@@ -72,41 +98,46 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
       });
     } else if (action === "power") {
       // Player heals
-      const healAmount = Math.round(playerMaxHP * 0.3);
-      const actualHeal = Math.min(healAmount, playerMaxHP - playerHP);
-
       setShowPlayerEffect(true);
       setTimeout(() => setShowPlayerEffect(false), 300);
 
       setPlayerHP((prev) => {
+        const healAmount = Math.round(playerMaxHP * 0.3);
+        const actualHeal = Math.min(healAmount, playerMaxHP - prev);
         const newHP = Math.min(playerMaxHP, prev + healAmount);
         addLog(`You healed ${actualHeal} HP!`);
+
+        // After healing, opponent takes a turn
         setTimeout(() => executeOpponentTurn(), 1500);
+
         return newHP;
       });
     }
 
+    // Player turn ends, opponent turn begins
     setBattlePhase("opponentTurn");
     setTurnCount((prev) => prev + 1);
   };
 
   const executeOpponentTurn = () => {
+    // If battle already finished, do nothing
+    if (winnerRef.current !== null) return;
+
     setBattlePhase("opponentTurn");
 
     setTimeout(() => {
       // AI decides action (70% attack, 30% heal if HP < 50%)
-      const hpPercent = (opponentHP / opponentMaxHP) * 100;
+      const hpPercent = (opponentHPRef.current / opponentMaxHP) * 100;
       const shouldHeal = hpPercent < 50 && Math.random() > 0.7;
 
       if (shouldHeal) {
         // Opponent heals
-        const healAmount = Math.round(opponentMaxHP * 0.3);
-        const actualHeal = Math.min(healAmount, opponentMaxHP - opponentHP);
-
         setShowOpponentEffect(true);
         setTimeout(() => setShowOpponentEffect(false), 300);
 
         setOpponentHP((prev) => {
+          const healAmount = Math.round(opponentMaxHP * 0.3);
+          const actualHeal = Math.min(healAmount, opponentMaxHP - prev);
           const newHP = Math.min(opponentMaxHP, prev + healAmount);
           addLog(`Opponent healed ${actualHeal} HP!`);
           return newHP;
@@ -138,8 +169,20 @@ export const BattleScreen: React.FC<BattleScreenProps> = ({
         });
       }
 
+      // AFTER the opponent finishes action, check latest HP
       setTimeout(() => {
-        if (playerHP > 0 && opponentHP > 0) {
+        // Use refs to avoid stale values from the closure
+        const currentPlayerHP = playerHPRef.current;
+        const currentOpponentHP = opponentHPRef.current;
+        const currentPhase = battlePhaseRef.current;
+        const currentWinner = winnerRef.current;
+
+        if (
+          currentWinner === null && // no winner yet
+          currentPhase !== "finished" &&
+          currentPlayerHP > 0 &&
+          currentOpponentHP > 0
+        ) {
           setBattlePhase("playerTurn");
         }
       }, 1500);

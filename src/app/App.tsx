@@ -80,17 +80,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (
-    <>
-      <button
-        onClick={logout}
-        className="fixed right-3 top-3 z-50 rounded bg-slate-800 px-3 py-1 text-sm text-white hover:bg-slate-700"
-      >
-        Logout
-      </button>
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
 
 function MainApp() {

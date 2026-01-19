@@ -18,7 +18,7 @@ interface ScannerScreenProps {
  * Must have CORS enabled for your Vercel domain.
  */
 const LAMBDA_ENDPOINT =
-  "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/prod/scan";
+  "https://xrodny7sqwzksywxd6ftmjld640pckib.lambda-url.ap-northeast-1.on.aws/";
 
 export const ScannerScreen: React.FC<ScannerScreenProps> = ({
   onNavigate,

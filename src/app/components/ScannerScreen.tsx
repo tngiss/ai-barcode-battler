@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { ScanBarcode, Camera, ArrowLeft } from "lucide-react";
@@ -11,9 +13,12 @@ interface ScannerScreenProps {
   onScan: (janCode: string) => void;
 }
 
-// PUT YOUR API GATEWAY (or Lambda Function URL) HERE
+/**
+ * Replace with your API Gateway endpoint (recommended) or Lambda Function URL.
+ * Must have CORS enabled for your Vercel domain.
+ */
 const LAMBDA_ENDPOINT =
-  "https://xrodny7sqwzksywxd6ftmjld640pckib.lambda-url.ap-northeast-1.on.aws/";
+  "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/prod/scan";
 
 export const ScannerScreen: React.FC<ScannerScreenProps> = ({
   onNavigate,
@@ -24,13 +29,14 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
   const [janCode, setJanCode] = useState("");
   const [scanning, setScanning] = useState(false);
 
-  // Camera states
+  // Camera / upload
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -42,47 +48,71 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
 
   const startCamera = async () => {
     setCameraError(null);
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Camera not supported in this browser.");
+      return;
+    }
+
+    // Stop any previous stream
+    stopCamera();
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false,
-      });
+      let stream: MediaStream;
+
+      // Try back camera first
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+      } catch {
+        // Fallback if facingMode isn't supported / fails
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
 
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+
+      const video = videoRef.current;
+      if (!video) return;
+
+      video.srcObject = stream;
+
+      // Wait until video has dimensions (prevents "blank video")
+      await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => resolve();
+      });
+
+      await video.play();
       setCameraActive(true);
     } catch (err: any) {
-      setCameraError(
-        err?.message ||
-          "Could not access camera. Please allow camera permission."
-      );
       setCameraActive(false);
+      setCameraError(err?.name ? `${err.name}: ${err.message}` : String(err));
     }
   };
 
   useEffect(() => {
     return () => {
-      // cleanup when leaving page
       stopCamera();
     };
   }, []);
 
-  const callLambdaWithImage = async (dataUrl: string) => {
+  const callLambdaWithImage = async (dataUrl: string, mimeType: string) => {
     setScanning(true);
+    setCameraError(null);
+
     try {
       const res = await fetch(LAMBDA_ENDPOINT, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           images: [
             {
-              base64: dataUrl, // includes: data:image/jpeg;base64,...
-              mimeType: "image/jpeg",
+              base64: dataUrl, // includes: data:image/...;base64,...
+              mimeType,
             },
           ],
         }),
@@ -90,18 +120,20 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
 
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Lambda error ${res.status}: ${text}`);
+        throw new Error(`API error ${res.status}: ${text}`);
       }
 
       const json = await res.json();
 
-      // Example: if Lambda returns { janCode: "123..." }
+      // If your Lambda returns { janCode: "..." }, automatically continue
       if (json?.janCode && typeof json.janCode === "string") {
         onScan(json.janCode);
       } else {
-        // If you want, handle other shapes here
+        // If your API returns something else, adjust here
         console.log("Lambda response:", json);
       }
+    } catch (e: any) {
+      setCameraError(e?.message ?? "Failed calling API.");
     } finally {
       setScanning(false);
     }
@@ -113,10 +145,13 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    // Make sure video has dimensions
     const w = video.videoWidth;
     const h = video.videoHeight;
-    if (!w || !h) return;
+
+    if (!w || !h) {
+      setCameraError("Camera not ready yet. Try again in a moment.");
+      return;
+    }
 
     canvas.width = w;
     canvas.height = h;
@@ -126,16 +161,34 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
 
     ctx.drawImage(video, 0, 0, w, h);
 
-    // Create a data URL like: data:image/jpeg;base64,/9j/...
     const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
 
-    // Optionally stop camera after capture
     stopCamera();
-
-    await callLambdaWithImage(dataUrl);
+    await callLambdaWithImage(dataUrl, "image/jpeg");
   };
 
-  // Existing manual JAN scan
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    await callLambdaWithImage(dataUrl, file.type || "image/jpeg");
+
+    // allow selecting the same file again
+    e.target.value = "";
+  };
+
+  // Existing manual JAN scan (demo)
   const handleScan = () => {
     if (janCode.length === 13) {
       setScanning(true);
@@ -188,22 +241,34 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.1 }}
         >
-          <div className="relative aspect-square bg-slate-900 rounded-xl overflow-hidden mb-6 flex items-center justify-center">
-            {/* Live camera preview */}
+          {/* Camera Preview Area */}
+          <div className="relative aspect-square bg-slate-900 rounded-xl overflow-hidden mb-4 flex items-center justify-center">
             {cameraActive ? (
               <video
                 ref={videoRef}
                 className="absolute inset-0 w-full h-full object-cover"
                 playsInline
                 muted
+                autoPlay
               />
             ) : (
               <Camera className="w-24 h-24 text-slate-600" />
             )}
 
-            {/* hidden canvas for capture */}
+            {/* Hidden canvas for snapshot */}
             <canvas ref={canvasRef} className="hidden" />
 
+            {/* Hidden file input for upload */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
+            {/* Scanning animation */}
             {scanning && (
               <motion.div
                 className="absolute inset-0 bg-cyan-500/20"
@@ -232,25 +297,37 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
                 </div>
               </motion.div>
             )}
+
+            {/* Error message */}
+            {cameraError && (
+              <div className="absolute bottom-2 left-2 right-2 text-xs text-red-200 bg-red-950/40 border border-red-500/30 rounded px-2 py-2">
+                {cameraError}
+              </div>
+            )}
           </div>
 
-          {/* Camera controls */}
-          <div className="space-y-3 mb-6">
-            {cameraError && (
-              <div className="text-sm text-red-400">{cameraError}</div>
-            )}
-
+          {/* Controls */}
+          <div className="flex gap-2 mb-6">
             {!cameraActive ? (
-              <Button
-                onClick={startCamera}
-                disabled={scanning}
-                className="w-full bg-cyan-500 hover:bg-cyan-600"
-              >
-                <Camera className="w-5 h-5 mr-2" />
-                Open Camera
-              </Button>
+              <>
+                <Button
+                  onClick={startCamera}
+                  disabled={scanning}
+                  className="flex-1 bg-cyan-500 hover:bg-cyan-600"
+                >
+                  Open Camera
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleUploadClick}
+                  disabled={scanning}
+                  className="flex-1 border-slate-700 hover:border-cyan-500/50 hover:bg-slate-800/80 text-white bg-primary"
+                >
+                  Upload Image
+                </Button>
+              </>
             ) : (
-              <div className="flex gap-2">
+              <>
                 <Button
                   onClick={captureAndSend}
                   disabled={scanning}
@@ -262,15 +339,15 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
                   variant="outline"
                   onClick={stopCamera}
                   disabled={scanning}
-                  className="border-slate-700 text-white bg-primary"
+                  className="border-slate-700 hover:border-cyan-500/50 hover:bg-slate-800/80 text-white bg-primary"
                 >
                   Close
                 </Button>
-              </div>
+              </>
             )}
           </div>
 
-          {/* Manual Input (keep your existing flow) */}
+          {/* Manual Input */}
           <div className="space-y-4">
             <label className="text-sm text-slate-400">{t("manualEntry")}</label>
             <Input

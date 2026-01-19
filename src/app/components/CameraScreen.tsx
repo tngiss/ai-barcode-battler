@@ -14,93 +14,6 @@ interface CameraScreenProps {
   error?: string | null;
 }
 
-/** ---------------- Image compression helpers (frontend) ---------------- */
-
-const TARGET_SINGLE_BYTES = 60 * 1024; // 200 KB
-const TARGET_COLLAB_BYTES = 30 * 1024; // 100 KB;
-
-// Approximate byte size of a data URL (base64)
-function approxDataUrlBytes(dataUrl: string): number {
-  const idx = dataUrl.indexOf(",");
-  const base64 = idx >= 0 ? dataUrl.slice(idx + 1) : dataUrl;
-  const len = base64.length;
-  // 4 base64 chars -> 3 bytes
-  let size = (len * 3) / 4;
-  if (base64.endsWith("==")) size -= 2;
-  else if (base64.endsWith("=")) size -= 1;
-  return Math.round(size);
-}
-
-/**
- * Compress a data URL to be under targetBytes (best-effort).
- * - Downscales to fit inside maxWidth x maxHeight.
- * - Uses JPEG and binary-searches quality.
- */
-async function compressDataUrlToTarget(
-  dataUrl: string,
-  targetBytes: number,
-  maxWidth = 400,
-  maxHeight = 400
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      let { width, height } = img;
-
-      // Downscale if too large (keep aspect ratio)
-      const scale = Math.min(maxWidth / width, maxHeight / height, 1);
-      width = Math.round(width * scale);
-      height = Math.round(height * scale);
-
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        // Fallback: return original
-        resolve(dataUrl);
-        return;
-      }
-
-      ctx.drawImage(img, 0, 0, width, height);
-
-      // Start with high quality
-      let qMin = 0.3;
-      let qMax = 0.9;
-      let best = canvas.toDataURL("image/jpeg", qMax);
-      let bestSize = approxDataUrlBytes(best);
-
-      // If already under target at high quality, done.
-      if (bestSize <= targetBytes) {
-        resolve(best);
-        return;
-      }
-
-      // Binary search quality for a few iterations
-      for (let i = 0; i < 6; i++) {
-        const qMid = (qMin + qMax) / 2;
-        const candidate = canvas.toDataURL("image/jpeg", qMid);
-        const size = approxDataUrlBytes(candidate);
-
-        if (size > targetBytes) {
-          qMax = qMid;
-        } else {
-          qMin = qMid;
-          best = candidate;
-          bestSize = size;
-        }
-      }
-
-      resolve(best);
-    };
-
-    img.onerror = (err) => reject(err);
-    img.src = dataUrl;
-  });
-}
-
-/** ---------------- Component ---------------- */
-
 export const CameraScreen: React.FC<CameraScreenProps> = ({
   requiredCount,
   onBack,
@@ -118,11 +31,32 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+    } finally {
+      setCameraActive(false);
     }
-    setCameraActive(false);
+  };
+
+  // Wait until video has dimensions (works better on iOS than only onloadedmetadata)
+  const waitForVideoReady = async (
+    video: HTMLVideoElement,
+    timeoutMs = 2000
+  ) => {
+    const start = Date.now();
+
+    // Ensure inline playback on iOS
+    video.setAttribute("playsinline", "true");
+
+    while (Date.now() - start < timeoutMs) {
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (w > 0 && h > 0) return;
+      await new Promise((r) => setTimeout(r, 50));
+    }
   };
 
   const startCamera = async () => {
@@ -133,16 +67,20 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       return;
     }
 
+    // Stop any previous stream
     stopCamera();
 
     try {
       let stream: MediaStream;
+
+      // Try back camera first
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" } },
           audio: false,
         });
       } catch {
+        // Fallback if facingMode isn't supported / fails
         stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false,
@@ -152,18 +90,34 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       streamRef.current = stream;
 
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) {
+        // This should not happen anymore because video is always rendered.
+        throw new Error("Video element not mounted.");
+      }
 
       video.srcObject = stream;
 
-      await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => resolve();
-      });
-
-      await video.play();
+      // Mark active now so UI shows preview immediately
       setCameraActive(true);
+
+      // Try to play (must be within user gesture; this is called from click)
+      try {
+        await video.play();
+      } catch {
+        // Sometimes play() rejects but video still works after metadata is ready
+      }
+
+      // Make sure dimensions are ready (avoids blank/0x0 captures)
+      await waitForVideoReady(video, 2500);
+
+      // Retry play after ready
+      try {
+        await video.play();
+      } catch {
+        // ignore
+      }
     } catch (err: any) {
-      setCameraActive(false);
+      stopCamera();
       setCameraError(err?.name ? `${err.name}: ${err.message}` : String(err));
     }
   };
@@ -181,10 +135,9 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   };
 
   const capture = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-
     const video = videoRef.current;
     const canvas = canvasRef.current;
+    if (!video || !canvas) return;
 
     const w = video.videoWidth;
     const h = video.videoHeight;
@@ -202,22 +155,9 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
 
     ctx.drawImage(video, 0, 0, w, h);
 
-    // Raw capture at high-ish quality
-    const rawDataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    const base64 = canvas.toDataURL("image/jpeg", 0.9);
+    addImage({ base64, mimeType: "image/jpeg" });
 
-    // Choose target size based on mode
-    const targetBytes =
-      requiredCount === 1 ? TARGET_SINGLE_BYTES : TARGET_COLLAB_BYTES;
-
-    // Compress to target
-    const compressedDataUrl = await compressDataUrlToTarget(
-      rawDataUrl,
-      targetBytes
-    );
-
-    addImage({ base64: compressedDataUrl, mimeType: "image/jpeg" });
-
-    // optional: auto-stop when reached required count
     if (images.length + 1 >= requiredCount) stopCamera();
   };
 
@@ -227,24 +167,16 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const rawBase64: string = await new Promise((resolve, reject) => {
+    const base64: string = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
 
-    const targetBytes =
-      requiredCount === 1 ? TARGET_SINGLE_BYTES : TARGET_COLLAB_BYTES;
+    addImage({ base64, mimeType: file.type || "image/jpeg" });
 
-    const compressedDataUrl = await compressDataUrlToTarget(
-      rawBase64,
-      targetBytes
-    );
-
-    // We re-encode as JPEG via canvas
-    addImage({ base64: compressedDataUrl, mimeType: "image/jpeg" });
-
+    // allow selecting the same file again
     e.target.value = "";
   };
 
@@ -292,25 +224,26 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
         >
-          {cameraActive ? (
-            <video
-              ref={videoRef}
-              className="absolute inset-0 w-full h-full object-cover"
-              playsInline
-              muted
-              autoPlay
-            />
-          ) : (
-            <Camera className="w-20 h-20 text-slate-600" />
-          )}
+          {/* IMPORTANT: always render video so ref exists */}
+          <video
+            ref={videoRef}
+            className={`absolute inset-0 w-full h-full object-cover ${
+              cameraActive ? "opacity-100" : "opacity-0"
+            }`}
+            playsInline
+            muted
+            autoPlay
+          />
+
+          {!cameraActive && <Camera className="w-20 h-20 text-slate-600" />}
 
           <canvas ref={canvasRef} className="hidden" />
 
+          {/* IMPORTANT: remove capture attribute so iOS doesn't force camera */}
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -414,7 +347,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         </div>
 
         <div className="mt-4 text-xs text-slate-500">
-          Tip: For best results, fill the frame with the product package.
+          Notes: iOS requires HTTPS for camera. If embedded in an iframe, camera
+          may be blocked unless permissions are allowed.
         </div>
       </div>
     </div>

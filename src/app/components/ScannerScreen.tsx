@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { ScanBarcode, Camera, ArrowLeft } from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -11,14 +11,131 @@ interface ScannerScreenProps {
   onScan: (janCode: string) => void;
 }
 
+// PUT YOUR API GATEWAY (or Lambda Function URL) HERE
+const LAMBDA_ENDPOINT =
+  "https://xrodny7sqwzksywxd6ftmjld640pckib.lambda-url.ap-northeast-1.on.aws/";
+
 export const ScannerScreen: React.FC<ScannerScreenProps> = ({
   onNavigate,
   onScan,
 }) => {
   const { t } = useLanguage();
+
   const [janCode, setJanCode] = useState("");
   const [scanning, setScanning] = useState(false);
 
+  // Camera states
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setCameraActive(false);
+  };
+
+  const startCamera = async () => {
+    setCameraError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraActive(true);
+    } catch (err: any) {
+      setCameraError(
+        err?.message ||
+          "Could not access camera. Please allow camera permission."
+      );
+      setCameraActive(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      // cleanup when leaving page
+      stopCamera();
+    };
+  }, []);
+
+  const callLambdaWithImage = async (dataUrl: string) => {
+    setScanning(true);
+    try {
+      const res = await fetch(LAMBDA_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          images: [
+            {
+              base64: dataUrl, // includes: data:image/jpeg;base64,...
+              mimeType: "image/jpeg",
+            },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Lambda error ${res.status}: ${text}`);
+      }
+
+      const json = await res.json();
+
+      // Example: if Lambda returns { janCode: "123..." }
+      if (json?.janCode && typeof json.janCode === "string") {
+        onScan(json.janCode);
+      } else {
+        // If you want, handle other shapes here
+        console.log("Lambda response:", json);
+      }
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const captureAndSend = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    // Make sure video has dimensions
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (!w || !h) return;
+
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, w, h);
+
+    // Create a data URL like: data:image/jpeg;base64,/9j/...
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+    // Optionally stop camera after capture
+    stopCamera();
+
+    await callLambdaWithImage(dataUrl);
+  };
+
+  // Existing manual JAN scan
   const handleScan = () => {
     if (janCode.length === 13) {
       setScanning(true);
@@ -48,7 +165,10 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => onNavigate("home")}
+            onClick={() => {
+              stopCamera();
+              onNavigate("home");
+            }}
             className="mr-4"
           >
             <ArrowLeft className="size-6" />
@@ -68,9 +188,21 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.1 }}
         >
-          {/* Scanner Animation */}
           <div className="relative aspect-square bg-slate-900 rounded-xl overflow-hidden mb-6 flex items-center justify-center">
-            <Camera className="w-24 h-24 text-slate-600" />
+            {/* Live camera preview */}
+            {cameraActive ? (
+              <video
+                ref={videoRef}
+                className="absolute inset-0 w-full h-full object-cover"
+                playsInline
+                muted
+              />
+            ) : (
+              <Camera className="w-24 h-24 text-slate-600" />
+            )}
+
+            {/* hidden canvas for capture */}
+            <canvas ref={canvasRef} className="hidden" />
 
             {scanning && (
               <motion.div
@@ -102,7 +234,43 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
             )}
           </div>
 
-          {/* Manual Input */}
+          {/* Camera controls */}
+          <div className="space-y-3 mb-6">
+            {cameraError && (
+              <div className="text-sm text-red-400">{cameraError}</div>
+            )}
+
+            {!cameraActive ? (
+              <Button
+                onClick={startCamera}
+                disabled={scanning}
+                className="w-full bg-cyan-500 hover:bg-cyan-600"
+              >
+                <Camera className="w-5 h-5 mr-2" />
+                Open Camera
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  onClick={captureAndSend}
+                  disabled={scanning}
+                  className="flex-1 bg-cyan-500 hover:bg-cyan-600"
+                >
+                  Capture & Send
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={stopCamera}
+                  disabled={scanning}
+                  className="border-slate-700 text-white bg-primary"
+                >
+                  Close
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Manual Input (keep your existing flow) */}
           <div className="space-y-4">
             <label className="text-sm text-slate-400">{t("manualEntry")}</label>
             <Input

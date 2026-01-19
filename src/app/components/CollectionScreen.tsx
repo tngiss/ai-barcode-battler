@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Star, Swords } from "lucide-react";
+import { ArrowLeft, Star, Swords, Users } from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
-import { Character } from "../utils/mockData";
+import { Character } from "../utils/types";
 import { Button } from "./ui/button";
 
 interface CollectionScreenProps {
@@ -14,18 +14,18 @@ interface CollectionScreenProps {
   excludeCharacter?: Character;
 }
 
-const rarityColors = {
+const rarityColors: Record<Character["rarity"], string> = {
   common: "border-slate-500",
   rare: "border-blue-500",
   epic: "border-purple-500",
   legendary: "border-yellow-500",
 };
 
-const rarityGlow = {
-  common: "shadow-slate-500/50",
-  rare: "shadow-blue-500/50",
-  epic: "shadow-purple-500/50",
-  legendary: "shadow-yellow-500/50",
+const rarityGlow: Record<Character["rarity"], string> = {
+  common: "shadow-slate-500/30",
+  rare: "shadow-blue-500/30",
+  epic: "shadow-purple-500/30",
+  legendary: "shadow-yellow-500/30",
 };
 
 export function CollectionScreen({
@@ -42,15 +42,12 @@ export function CollectionScreen({
   );
 
   const filteredCharacters = excludeCharacter
-    ? characters.filter((char) => char.id !== excludeCharacter.id)
+    ? characters.filter((c) => c.id !== excludeCharacter.id)
     : characters;
 
   const handleCharacterClick = (character: Character) => {
-    if (selectMode && onSelectCharacter) {
-      onSelectCharacter(character);
-    } else {
-      setSelectedCharacter(character);
-    }
+    if (selectMode && onSelectCharacter) onSelectCharacter(character);
+    else setSelectedCharacter(character);
   };
 
   return (
@@ -82,7 +79,7 @@ export function CollectionScreen({
           </div>
         </motion.div>
 
-        {/* Empty State */}
+        {/* Empty */}
         {filteredCharacters.length === 0 && (
           <motion.div
             className="text-center py-20"
@@ -100,16 +97,16 @@ export function CollectionScreen({
           </motion.div>
         )}
 
-        {/* Character Grid */}
+        {/* Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {filteredCharacters.map((character, index) => (
             <motion.div
               key={character.id}
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.05 }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              transition={{ delay: index * 0.04 }}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.98 }}
             >
               <button
                 onClick={() => handleCharacterClick(character)}
@@ -119,7 +116,6 @@ export function CollectionScreen({
                   rarityGlow[character.rarity]
                 } transition-all`}
               >
-                {/* Image */}
                 <div className="relative aspect-[3/4] overflow-hidden">
                   <img
                     src={character.imageUrl}
@@ -128,26 +124,23 @@ export function CollectionScreen({
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent" />
 
-                  {/* Campaign Badge */}
-                  {character.isCampaign && (
-                    <div className="absolute top-2 right-2 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded">
-                      ★
+                  {character.collaboration && (
+                    <div className="absolute top-2 right-2 bg-purple-500 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1">
+                      <Users className="size-3" /> COLLAB
                     </div>
                   )}
 
-                  {/* Rarity Stars */}
                   <div className="absolute bottom-2 left-2 flex gap-0.5">
-                    {[
-                      ...Array(
+                    {Array.from({
+                      length:
                         character.rarity === "legendary"
                           ? 4
                           : character.rarity === "epic"
                           ? 3
                           : character.rarity === "rare"
                           ? 2
-                          : 1
-                      ),
-                    ].map((_, i) => (
+                          : 1,
+                    }).map((_, i) => (
                       <Star
                         key={i}
                         className={`w-3 h-3 ${
@@ -164,7 +157,6 @@ export function CollectionScreen({
                   </div>
                 </div>
 
-                {/* Info */}
                 <div className="p-3">
                   <h3 className="text-white font-bold text-sm truncate">
                     {character.name}
@@ -173,8 +165,7 @@ export function CollectionScreen({
                     {character.productName}
                   </p>
 
-                  {/* Mini Stats */}
-                  <div className="mt-2 grid grid-cols-4 gap-1 text-xs">
+                  <div className="mt-2 grid grid-cols-3 gap-1 text-xs">
                     <div className="text-center">
                       <div className="text-red-400 font-bold">
                         {character.stats.hp}
@@ -193,12 +184,6 @@ export function CollectionScreen({
                       </div>
                       <div className="text-slate-500">DEF</div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-yellow-400 font-bold">
-                        {character.stats.speed}
-                      </div>
-                      <div className="text-slate-500">SPD</div>
-                    </div>
                   </div>
                 </div>
               </button>
@@ -206,7 +191,7 @@ export function CollectionScreen({
           ))}
         </div>
 
-        {/* Character Detail Modal */}
+        {/* Detail modal */}
         {selectedCharacter && !selectMode && (
           <motion.div
             className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6"
@@ -216,7 +201,7 @@ export function CollectionScreen({
           >
             <motion.div
               className="bg-slate-900 rounded-2xl p-6 max-w-md w-full border border-slate-700"
-              initial={{ scale: 0.9, y: 20 }}
+              initial={{ scale: 0.92, y: 16 }}
               animate={{ scale: 1, y: 0 }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -224,7 +209,7 @@ export function CollectionScreen({
                 <img
                   src={selectedCharacter.imageUrl}
                   alt={selectedCharacter.name}
-                  className="w-24 h-full object-cover rounded-lg"
+                  className="w-24 h-32 object-cover rounded-lg"
                 />
                 <div className="flex-1">
                   <h2 className="text-xl font-bold text-white mb-1">
@@ -233,39 +218,51 @@ export function CollectionScreen({
                   <p className="text-slate-400 text-sm mb-3">
                     {selectedCharacter.productName}
                   </p>
-                  <div className="space-y-2 text-sm">
+
+                  <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-slate-400">HP:</span>
+                      <span className="text-slate-400">HP</span>
                       <span className="text-red-400 font-bold">
                         {selectedCharacter.stats.hp}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">ATK:</span>
+                      <span className="text-slate-400">ATK</span>
                       <span className="text-orange-400 font-bold">
                         {selectedCharacter.stats.attack}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">DEF:</span>
+                      <span className="text-slate-400">DEF</span>
                       <span className="text-blue-400 font-bold">
                         {selectedCharacter.stats.defense}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">SPD:</span>
-                      <span className="text-yellow-400 font-bold">
-                        {selectedCharacter.stats.speed}
+                      <span className="text-slate-400">MISS%</span>
+                      <span className="text-slate-200 font-bold">
+                        {selectedCharacter.stats.missChance}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">CRIT%</span>
+                      <span className="text-slate-200 font-bold">
+                        {selectedCharacter.stats.critChance}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">HEAL%</span>
+                      <span className="text-slate-200 font-bold">
+                        {selectedCharacter.stats.heal}
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {onBattle && (
+              {onBattle && characters.length >= 2 && (
                 <Button
                   onClick={() => {
-                    // Select random opponent
                     const opponents = characters.filter(
                       (c) => c.id !== selectedCharacter.id
                     );

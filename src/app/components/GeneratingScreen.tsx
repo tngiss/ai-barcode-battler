@@ -3,13 +3,7 @@ import { motion } from "motion/react";
 import { Sparkles, Zap, Star, Flame, Droplet, Leaf } from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
 
-interface GeneratingScreenProps {
-  onComplete: () => void;
-}
-
-export const GeneratingScreen: React.FC<GeneratingScreenProps> = ({
-  onComplete,
-}) => {
+export const GeneratingScreen: React.FC = () => {
   const { t } = useLanguage();
   const [step, setStep] = useState(0);
 
@@ -20,16 +14,12 @@ export const GeneratingScreen: React.FC<GeneratingScreenProps> = ({
   ];
 
   useEffect(() => {
-    const timer1 = setTimeout(() => setStep(1), 1200);
-    const timer2 = setTimeout(() => setStep(2), 2400);
-    const timer3 = setTimeout(() => onComplete(), 3600);
+    const timer = setInterval(() => {
+      setStep((s) => (s + 1) % steps.length);
+    }, 1200);
 
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
-  }, [onComplete]);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -74,57 +64,35 @@ export const GeneratingScreen: React.FC<GeneratingScreenProps> = ({
       })}
 
       <div className="relative z-10 text-center">
-        {/* Central rotating crystal */}
+        {/* Central crystal */}
         <div className="relative w-32 h-32 mx-auto mb-12">
-          {/* Outer ring */}
           <motion.div
             className="absolute inset-0 border-4 border-cyan-400/30 rounded-full"
-            animate={{
-              rotate: 360,
-              scale: [1, 1.1, 1],
-            }}
+            animate={{ rotate: 360, scale: [1, 1.1, 1] }}
             transition={{
               rotate: { duration: 4, repeat: Infinity, ease: "linear" },
               scale: { duration: 2, repeat: Infinity },
             }}
           />
-
-          {/* Middle ring */}
           <motion.div
             className="absolute inset-3 border-4 border-purple-400/30 rounded-full"
-            animate={{
-              rotate: -360,
-              scale: [1.1, 1, 1.1],
-            }}
+            animate={{ rotate: -360, scale: [1.1, 1, 1.1] }}
             transition={{
               rotate: { duration: 3, repeat: Infinity, ease: "linear" },
               scale: { duration: 2, repeat: Infinity, delay: 0.5 },
             }}
           />
 
-          {/* Center crystal */}
           <motion.div
             className="absolute inset-0 flex items-center justify-center"
-            animate={{
-              rotate: [0, 360],
-            }}
-            transition={{
-              duration: 8,
-              repeat: Infinity,
-              ease: "linear",
-            }}
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
           >
             <motion.div
               className="relative"
-              animate={{
-                scale: [1, 1.2, 1],
-              }}
-              transition={{
-                duration: 1.5,
-                repeat: Infinity,
-              }}
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
             >
-              {/* Diamond shape */}
               <div className="relative w-16 h-16">
                 <motion.div
                   className="absolute inset-0 bg-gradient-to-br from-cyan-400 via-purple-400 to-pink-400 transform rotate-45"
@@ -139,50 +107,31 @@ export const GeneratingScreen: React.FC<GeneratingScreenProps> = ({
                       "0 0 40px rgba(6, 182, 212, 0.6), 0 0 60px rgba(168, 85, 247, 0.4)",
                     ],
                   }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                  }}
+                  transition={{ duration: 2, repeat: Infinity }}
                 />
               </div>
 
-              {/* Center icon */}
               <motion.div
                 className="absolute inset-0 flex items-center justify-center"
-                animate={{
-                  rotate: [0, -360],
-                }}
-                transition={{
-                  duration: 8,
-                  repeat: Infinity,
-                  ease: "linear",
-                }}
+                animate={{ rotate: [0, -360] }}
+                transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
               >
                 <Sparkles className="w-8 h-8 text-white" />
               </motion.div>
             </motion.div>
           </motion.div>
 
-          {/* Energy pulses */}
           {[...Array(3)].map((_, i) => (
             <motion.div
               key={i}
               className="absolute inset-0 border-2 border-cyan-400 rounded-full"
               initial={{ scale: 0.5, opacity: 0.8 }}
-              animate={{
-                scale: 2,
-                opacity: 0,
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                delay: i * 0.6,
-              }}
+              animate={{ scale: 2, opacity: 0 }}
+              transition={{ duration: 2, repeat: Infinity, delay: i * 0.6 }}
             />
           ))}
         </div>
 
-        {/* Title */}
         <motion.h1
           className="text-3xl font-black mb-2"
           initial={{ opacity: 0, y: 20 }}
@@ -193,7 +142,6 @@ export const GeneratingScreen: React.FC<GeneratingScreenProps> = ({
           </span>
         </motion.h1>
 
-        {/* Step indicator */}
         <motion.div
           className="text-cyan-400 text-sm mb-8"
           initial={{ opacity: 0 }}
@@ -203,7 +151,6 @@ export const GeneratingScreen: React.FC<GeneratingScreenProps> = ({
           {t(steps[step].key)}
         </motion.div>
 
-        {/* Elemental icons floating */}
         <div className="flex justify-center gap-4 mb-8">
           {[
             { Icon: Flame, color: "text-orange-400", delay: 0 },
@@ -216,44 +163,27 @@ export const GeneratingScreen: React.FC<GeneratingScreenProps> = ({
               key={index}
               className={color}
               initial={{ y: 0, opacity: 0.5 }}
-              animate={{
-                y: [0, -20, 0],
-                opacity: [0.5, 1, 0.5],
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                delay,
-              }}
+              animate={{ y: [0, -20, 0], opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity, delay }}
             >
               <Icon className="size-6" />
             </motion.div>
           ))}
         </div>
 
-        {/* Progress bar */}
         <div className="w-64 h-2 bg-slate-800/50 rounded-full overflow-hidden mx-auto backdrop-blur-sm">
           <motion.div
             className="h-full bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500"
             initial={{ width: "0%" }}
-            animate={{ width: "100%" }}
-            transition={{ duration: 3.6, ease: "easeInOut" }}
-            style={{
-              boxShadow: "0 0 20px rgba(6, 182, 212, 0.8)",
-            }}
+            animate={{ width: ["0%", "100%"] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            style={{ boxShadow: "0 0 20px rgba(6, 182, 212, 0.8)" }}
           />
         </div>
 
-        {/* Percentage counter */}
-        <motion.div
-          className="mt-4 text-2xl font-black text-white"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            {step === 0 ? "33%" : step === 1 ? "66%" : "99%"}
-          </motion.span>
-        </motion.div>
+        <div className="mt-4 text-sm text-slate-300">
+          Waiting for AI response...
+        </div>
       </div>
     </div>
   );

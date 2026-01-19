@@ -2,20 +2,29 @@ import React, { useCallback, useState } from "react";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { HomeScreen } from "./components/HomeScreen";
 import { ScannerScreen } from "./components/ScannerScreen";
+import { CameraScreen, CaptureImage } from "./components/CameraScreen";
 import { GeneratingScreen } from "./components/GeneratingScreen";
 import { CharacterCard } from "./components/CharacterCard";
 import { BattleScreen } from "./components/BattleScreen";
 import { CollectionScreen } from "./components/CollectionScreen";
-import { Character, generateCharacter } from "./utils/mockData";
+import { Character } from "./utils/types";
 
 type Screen =
   | "home"
   | "scanner"
+  | "camera"
   | "generating"
   | "character"
   | "battle"
   | "collection"
   | "selectOpponent";
+
+/**
+ * Replace with your API Gateway endpoint (recommended) or Lambda Function URL.
+ * Must have CORS enabled for your Vercel domain.
+ */
+const LAMBDA_ENDPOINT =
+  "https://xrodny7sqwzksywxd6ftmjld640pckib.lambda-url.ap-northeast-1.on.aws/";
 
 // ---- fake basic auth (client-side) ----
 const AUTH_KEY = "fake_basic_auth_ok";
@@ -29,7 +38,7 @@ function ensureAuth(): boolean {
     const u = window.prompt("Username:");
     if (u == null) return false;
 
-    const p = window.prompt("Password:"); // not masked
+    const p = window.prompt("Password:");
     if (p == null) return false;
 
     if (u === AUTH_USER && p === AUTH_PASS) {
@@ -75,6 +84,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           >
             Authenticate
           </button>
+
+          <button
+            onClick={logout}
+            className="w-full mt-2 rounded bg-slate-800 hover:bg-slate-700 px-3 py-2 text-sm"
+          >
+            Reset Auth
+          </button>
         </div>
       </div>
     );
@@ -83,51 +99,100 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+async function callLambda(images: CaptureImage[]): Promise<Character> {
+  const res = await fetch(LAMBDA_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ images }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+
+  const json = (await res.json()) as Character;
+
+  if (!json?.id || !json?.name || !json?.stats?.hp) {
+    throw new Error(
+      "Invalid API response (missing required character fields)."
+    );
+  }
+
+  return json;
+}
+
 function MainApp() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("home");
+
   const [currentCharacter, setCurrentCharacter] = useState<Character | null>(
     null
   );
+
   const [collection, setCollection] = useState<Character[]>([]);
+
   const [battlePlayer, setBattlePlayer] = useState<Character | null>(null);
   const [battleOpponent, setBattleOpponent] = useState<Character | null>(null);
 
-  const handleScan = (janCode: string) => {
-    const character = generateCharacter(janCode);
-    setCurrentCharacter(character);
-    setCurrentScreen("generating");
+  const [scanMode, setScanMode] = useState<"single" | "collaboration">(
+    "single"
+  );
+  const requiredCount = scanMode === "collaboration" ? 2 : 1;
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  const [pendingBattlePlayer, setPendingBattlePlayer] =
+    useState<Character | null>(null);
+
+  const handleNavigate = (screen: string) => {
+    setCurrentScreen(screen as Screen);
   };
 
-  const handleGeneratingComplete = () => {
-    setCurrentScreen("character");
+  const handleChooseMode = (mode: "single" | "collaboration") => {
+    setScanMode(mode);
+    setScanError(null);
+    setCurrentScreen("camera");
+  };
+
+  const handleSubmitImages = async (images: CaptureImage[]) => {
+    setScanError(null);
+    setCurrentScreen("generating");
+
+    try {
+      const character = await callLambda(images);
+      setCurrentCharacter(character);
+      setCurrentScreen("character");
+    } catch (e: any) {
+      setScanError(e?.message ?? "Failed calling API.");
+      setCurrentScreen("camera");
+    }
   };
 
   const handleSaveToCollection = () => {
-    if (currentCharacter) {
-      const exists = collection.some(
-        (char) => char.janCode === currentCharacter.janCode
-      );
-      if (!exists) setCollection([...collection, currentCharacter]);
-      setCurrentScreen("collection");
-    }
+    if (!currentCharacter) return;
+
+    setCollection((prev) => {
+      const exists = prev.some((c) => c.id === currentCharacter.id);
+      if (exists) return prev;
+      return [...prev, currentCharacter];
+    });
+
+    setCurrentScreen("collection");
   };
 
   const handleStartBattle = () => {
     if (!currentCharacter) return;
 
-    setBattlePlayer(currentCharacter);
+    // Require selecting opponent (no static demo opponent)
+    setPendingBattlePlayer(currentCharacter);
+    setCurrentScreen("selectOpponent");
+  };
 
-    if (collection.length > 0) {
-      const randomOpponent =
-        collection[Math.floor(Math.random() * collection.length)];
-      setBattleOpponent(randomOpponent);
-      setCurrentScreen("battle");
-    } else {
-      const opponentJAN = "4902102119917"; // Pocky
-      const opponent = generateCharacter(opponentJAN);
-      setBattleOpponent(opponent);
-      setCurrentScreen("battle");
-    }
+  const handleSelectOpponent = (opponent: Character) => {
+    if (!pendingBattlePlayer) return;
+    setBattlePlayer(pendingBattlePlayer);
+    setBattleOpponent(opponent);
+    setPendingBattlePlayer(null);
+    setCurrentScreen("battle");
   };
 
   const handleBattleFromCollection = (
@@ -139,22 +204,28 @@ function MainApp() {
     setCurrentScreen("battle");
   };
 
-  const handleNavigate = (screen: string) => {
-    setCurrentScreen(screen as Screen);
-  };
-
   return (
     <LanguageProvider>
       <div className="min-h-screen bg-slate-950">
         {currentScreen === "home" && <HomeScreen onNavigate={handleNavigate} />}
 
         {currentScreen === "scanner" && (
-          <ScannerScreen onNavigate={handleNavigate} onScan={handleScan} />
+          <ScannerScreen
+            onNavigate={handleNavigate}
+            onChooseMode={handleChooseMode}
+          />
         )}
 
-        {currentScreen === "generating" && (
-          <GeneratingScreen onComplete={handleGeneratingComplete} />
+        {currentScreen === "camera" && (
+          <CameraScreen
+            requiredCount={requiredCount}
+            onBack={() => setCurrentScreen("scanner")}
+            onSubmit={handleSubmitImages}
+            error={scanError}
+          />
         )}
+
+        {currentScreen === "generating" && <GeneratingScreen />}
 
         {currentScreen === "character" && currentCharacter && (
           <CharacterCard
@@ -171,6 +242,16 @@ function MainApp() {
             characters={collection}
             onNavigate={handleNavigate}
             onBattle={handleBattleFromCollection}
+          />
+        )}
+
+        {currentScreen === "selectOpponent" && pendingBattlePlayer && (
+          <CollectionScreen
+            characters={collection}
+            onNavigate={handleNavigate}
+            selectMode={true}
+            excludeCharacter={pendingBattlePlayer}
+            onSelectCharacter={handleSelectOpponent}
           />
         )}
 

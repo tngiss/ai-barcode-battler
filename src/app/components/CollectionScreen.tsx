@@ -1,6 +1,17 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Star, Swords, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  Star,
+  Swords,
+  Users,
+  Heart,
+  Shield,
+  Target,
+  Sparkles,
+  HandHelping,
+  Zap,
+} from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Character } from "../utils/types";
 import { Button } from "./ui/button";
@@ -27,6 +38,28 @@ const rarityGlow: Record<Character["rarity"], string> = {
   epic: "shadow-purple-500/30",
   legendary: "shadow-yellow-500/30",
 };
+
+function StatIcon({
+  Icon,
+  value,
+  color,
+  label,
+}: {
+  Icon: React.ComponentType<{ className?: string }>;
+  value: number;
+  color: string;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Icon className={`w-3.5 h-3.5 ${color}`} />
+      <div className="leading-none text-start">
+        <div className={`text-[11px] font-bold ${color}`}>{value}</div>
+        <div className="text-[9px] text-slate-500 uppercase">{label}</div>
+      </div>
+    </div>
+  );
+}
 
 export function CollectionScreen({
   characters,
@@ -116,6 +149,7 @@ export function CollectionScreen({
                   rarityGlow[character.rarity]
                 } transition-all`}
               >
+                {/* Image */}
                 <div className="relative aspect-[3/4] overflow-hidden">
                   <img
                     src={character.imageUrl}
@@ -157,6 +191,7 @@ export function CollectionScreen({
                   </div>
                 </div>
 
+                {/* Info */}
                 <div className="p-3">
                   <h3 className="text-white font-bold text-sm truncate">
                     {character.name}
@@ -165,25 +200,44 @@ export function CollectionScreen({
                     {character.productName}
                   </p>
 
-                  <div className="mt-2 grid grid-cols-3 gap-1 text-xs">
-                    <div className="text-center">
-                      <div className="text-red-400 font-bold">
-                        {character.stats.hp}
-                      </div>
-                      <div className="text-slate-500">HP</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-orange-400 font-bold">
-                        {character.stats.attack}
-                      </div>
-                      <div className="text-slate-500">ATK</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-blue-400 font-bold">
-                        {character.stats.defense}
-                      </div>
-                      <div className="text-slate-500">DEF</div>
-                    </div>
+                  {/* Stats (icons) */}
+                  <div className="mt-3 grid grid-cols-2 gap-x-2 gap-y-2">
+                    <StatIcon
+                      Icon={Heart}
+                      value={character.stats.hp}
+                      color="text-red-400"
+                      label="HP"
+                    />
+                    <StatIcon
+                      Icon={Swords}
+                      value={character.stats.attack}
+                      color="text-orange-400"
+                      label="ATK"
+                    />
+                    <StatIcon
+                      Icon={Shield}
+                      value={character.stats.defense}
+                      color="text-blue-400"
+                      label="DEF"
+                    />
+                    <StatIcon
+                      Icon={Target}
+                      value={character.stats.missChance}
+                      color="text-slate-200"
+                      label="MISS%"
+                    />
+                    <StatIcon
+                      Icon={Zap}
+                      value={character.stats.critChance}
+                      color="text-yellow-300"
+                      label="CRIT%"
+                    />
+                    <StatIcon
+                      Icon={HandHelping}
+                      value={character.stats.heal}
+                      color="text-emerald-300"
+                      label="HEAL%"
+                    />
                   </div>
                 </div>
               </button>
@@ -209,7 +263,7 @@ export function CollectionScreen({
                 <img
                   src={selectedCharacter.imageUrl}
                   alt={selectedCharacter.name}
-                  className="w-24 h-32 object-cover rounded-lg"
+                  className="w-24 h-full object-cover rounded-lg"
                 />
                 <div className="flex-1">
                   <h2 className="text-xl font-bold text-white mb-1">
@@ -219,39 +273,52 @@ export function CollectionScreen({
                     {selectedCharacter.productName}
                   </p>
 
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">HP</span>
+                  <div className="grid grid-cols-2 gap-y-2 gap-x-6 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <Heart className="w-4 h-4 text-red-400" /> HP
+                      </span>
                       <span className="text-red-400 font-bold">
                         {selectedCharacter.stats.hp}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">ATK</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <Swords className="w-4 h-4 text-orange-400" /> ATK
+                      </span>
                       <span className="text-orange-400 font-bold">
                         {selectedCharacter.stats.attack}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">DEF</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-blue-400" /> DEF
+                      </span>
                       <span className="text-blue-400 font-bold">
                         {selectedCharacter.stats.defense}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">MISS%</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <Target className="w-4 h-4 text-slate-200" /> MISS%
+                      </span>
                       <span className="text-slate-200 font-bold">
                         {selectedCharacter.stats.missChance}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">CRIT%</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-yellow-300" /> CRIT%
+                      </span>
                       <span className="text-slate-200 font-bold">
                         {selectedCharacter.stats.critChance}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">HEAL%</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <HandHelping className="w-4 h-4 text-emerald-300" />{" "}
+                        HEAL%
+                      </span>
                       <span className="text-slate-200 font-bold">
                         {selectedCharacter.stats.heal}
                       </span>

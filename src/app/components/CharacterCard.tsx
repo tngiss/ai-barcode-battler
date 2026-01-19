@@ -1,6 +1,15 @@
 import React from "react";
 import { motion } from "motion/react";
-import { Star, Swords, Save } from "lucide-react";
+import {
+  Star,
+  Swords,
+  Save,
+  Heart,
+  Shield,
+  Target,
+  HandHelping,
+  Zap,
+} from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Character } from "../utils/types";
 import { Button } from "./ui/button";
@@ -35,11 +44,24 @@ const rarityColors: Record<Character["rarity"], string> = {
   legendary: "text-yellow-400",
 };
 
-function StatPill({ label, value }: { label: string; value: number | string }) {
+function StatPill({
+  icon: Icon,
+  label,
+  value,
+  color = "text-slate-200",
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: number | string;
+  color?: string;
+}) {
   return (
     <div className="bg-slate-900/60 border border-slate-700 rounded-lg p-3">
-      <div className="text-[11px] text-slate-400 uppercase">{label}</div>
-      <div className="text-white text-lg font-black">{value}</div>
+      <div className="flex items-center gap-2 mb-1">
+        <Icon className={`w-4 h-4 ${color}`} />
+        <div className="text-[11px] text-slate-400 uppercase">{label}</div>
+      </div>
+      <div className="text-white text-lg font-black leading-none">{value}</div>
     </div>
   );
 }
@@ -52,7 +74,6 @@ export const CharacterCard: React.FC<CharacterCardProps> = ({
   showActions = true,
 }) => {
   const { t } = useLanguage();
-
   const mult = character.collaboration?.multiplier;
 
   return (
@@ -189,19 +210,49 @@ export const CharacterCard: React.FC<CharacterCardProps> = ({
                 </div>
               )}
 
-              {/* Stats */}
+              {/* Stats with icons */}
               <motion.div
                 className="grid grid-cols-2 gap-3"
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.45 }}
               >
-                <StatPill label="HP" value={character.stats.hp} />
-                <StatPill label="ATK" value={character.stats.attack} />
-                <StatPill label="DEF" value={character.stats.defense} />
-                <StatPill label="MISS%" value={character.stats.missChance} />
-                <StatPill label="CRIT%" value={character.stats.critChance} />
-                <StatPill label="HEAL%" value={character.stats.heal} />
+                <StatPill
+                  icon={Heart}
+                  label="HP"
+                  value={character.stats.hp}
+                  color="text-red-400"
+                />
+                <StatPill
+                  icon={Swords}
+                  label="ATK"
+                  value={character.stats.attack}
+                  color="text-orange-400"
+                />
+                <StatPill
+                  icon={Shield}
+                  label="DEF"
+                  value={character.stats.defense}
+                  color="text-blue-400"
+                />
+                <StatPill
+                  icon={Target}
+                  label="MISS%"
+                  value={character.stats.missChance}
+                  color="text-slate-200"
+                />
+                <StatPill
+                  icon={Zap}
+                  label="CRIT%"
+                  value={character.stats.critChance}
+                  color="text-yellow-300"
+                />
+                <StatPill
+                  icon={HandHelping}
+                  label="HEAL%"
+                  value={character.stats.heal}
+                  color="text-emerald-300"
+                />
               </motion.div>
 
               {/* Actions */}
